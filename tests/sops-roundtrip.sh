@@ -20,8 +20,9 @@ tar --exclude=.git --exclude=__pycache__ --exclude=.build -cf - . | tar -xf - -C
 age-keygen -o "$tmp/key.txt" >/dev/null 2>&1
 recipient=$(age-keygen -y "$tmp/key.txt")
 
-# sops merges the repository's creation rule (placeholder recipient) with --age,
-# so point the scratch copy's rule at the throwaway key instead.
+# sops finds .sops.yaml from the working directory (the real repository, with its
+# placeholder recipient). Point the scratch copy's rule at the throwaway key and
+# hand that file to sops explicitly.
 sed -i.bak "s/age1[a-z0-9]*\$/${recipient}/" "$scratch/.sops.yaml"
 
 secret="$scratch/apps/podinfo/overlays/staging/db.sops.yaml"
@@ -45,7 +46,7 @@ fi
 grep -q "db.sops.yaml" "$tmp/plain.out" || { cat "$tmp/plain.out"; echo "FAIL: wrong complaint" >&2; exit 1; }
 
 echo "== encrypt with sops"
-sops --encrypt --age "$recipient" --encrypted-regex '^(data|stringData)$' --in-place "$secret"
+sops --config "$scratch/.sops.yaml" --encrypt --age "$recipient" --encrypted-regex '^(data|stringData)$' --in-place "$secret"
 if grep -q "roundtrip-demo-value" "$secret"; then
   echo "FAIL: the plaintext value is still in the encrypted file" >&2
   exit 1
