@@ -1,0 +1,7 @@
+# Encryption rules for sops. Files named *.sops.yaml have only their values
+# encrypted, so diffs stay readable. Replace the placeholder with the PUBLIC half
+# of your own age key (age-keygen prints it); never commit the private half.
+creation_rules:
+  - path_regex: .*\.sops\.ya?ml$
+    encrypted_regex: ^(data|stringData)$
+    age: age1replacewithyourownpublickeyreplacewithyourownpublickeyreplace00

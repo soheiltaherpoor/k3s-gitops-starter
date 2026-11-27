@@ -1,0 +1,50 @@
+# What the staging cluster pulls and in what order. Applied once by hand (or by
+# `flux bootstrap`); after that the cluster follows git on its own.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: platform
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/soheiltaherpoor/k3s-gitops-starter
+  ref:
+    branch: main
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure
+  namespace: flux-system
+spec:
+  interval: 10m
+  sourceRef:
+    kind: GitRepository
+    name: platform
+  path: ./infrastructure/staging
+  prune: true
+  wait: true
+  timeout: 3m
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  interval: 10m
+  dependsOn:
+    - name: infrastructure
+  sourceRef:
+    kind: GitRepository
+    name: platform
+  path: ./apps/staging
+  prune: true
+  wait: true
+  timeout: 5m
+  # Encrypted *.sops.yaml files under this path are decrypted with the age key
+  # in the sops-age secret. See secrets/README.md.
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age

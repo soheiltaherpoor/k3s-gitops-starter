@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: podinfo
+resources:
+  - ../../base
+# The version this environment runs. Promotion copies this tag to production
+# (python3 tools/gitops.py promote).
+images:
+  - name: ghcr.io/stefanprodan/podinfo
+    newTag: 6.7.1
+replicas:
+  - name: podinfo
+    count: 1
+labels:
+  - pairs:
+      environment: staging
+    includeSelectors: false
+patches:
+  - target:
+      kind: Deployment
+      name: podinfo
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: podinfo
+      spec:
+        template:
+          spec:
+            containers:
+              - name: podinfo
+                env:
+                  - name: PODINFO_UI_MESSAGE
+                    value: staging
+                  - name: PODINFO_UI_COLOR
+                    value: "#34577c"

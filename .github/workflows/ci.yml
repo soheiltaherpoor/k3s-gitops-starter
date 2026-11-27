@@ -1,0 +1,92 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python tools/gitops.py check
+
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install yamllint
+      - name: YAML lint
+        run: yamllint .github apps clusters infrastructure .sops.yaml .yamllint
+      - name: ShellCheck
+        run: shellcheck tests/e2e.sh tests/sops-roundtrip.sh
+      - name: Install kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+      - name: Render every overlay and validate the manifests
+        run: make validate
+
+  sops:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt
+      - name: Install age and sops
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y age
+          sudo curl -fsSL -o /usr/local/bin/sops \
+            https://github.com/getsops/sops/releases/download/v3.10.2/sops-v3.10.2.linux.amd64
+          sudo chmod +x /usr/local/bin/sops
+      - run: make sops-test
+
+  e2e:
+    # Flux can only clone commits that exist on GitHub, so pull requests (whose
+    # commits may live in a fork) get the checks above but not this job.
+    if: github.event_name != 'pull_request'
+    needs: [test, validate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [staging, production]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt
+      - name: Install k3d, Flux CLI and age
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | TAG=v5.8.3 bash
+          sudo apt-get update
+          sudo apt-get install -y age
+      - uses: fluxcd/flux2/action@v2
+      - name: Converge ${{ matrix.env }} on a k3d cluster
+        env:
+          GIT_URL: ${{ github.server_url }}/${{ github.repository }}
+          GIT_BRANCH: ${{ github.ref_name }}
+          GIT_COMMIT: ${{ github.sha }}
+        run: bash tests/e2e.sh ${{ matrix.env }}

@@ -1,0 +1,6 @@
+# Everything Flux deploys to the staging cluster as "apps". Add an app by adding
+# its staging overlay here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../podinfo/overlays/staging
