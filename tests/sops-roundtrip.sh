@@ -20,6 +20,10 @@ tar --exclude=.git --exclude=__pycache__ --exclude=.build -cf - . | tar -xf - -C
 age-keygen -o "$tmp/key.txt" >/dev/null 2>&1
 recipient=$(age-keygen -y "$tmp/key.txt")
 
+# sops merges the repository's creation rule (placeholder recipient) with --age,
+# so point the scratch copy's rule at the throwaway key instead.
+sed -i.bak "s/age1[a-z0-9]*\$/${recipient}/" "$scratch/.sops.yaml"
+
 secret="$scratch/apps/podinfo/overlays/staging/db.sops.yaml"
 cat > "$secret" <<'EOF'
 apiVersion: v1
